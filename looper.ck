@@ -117,10 +117,10 @@ for (0 => int i; i < files.cap(); i++) {
     (0, 0) => s[i].setFeedbackGain;
 }
 
-1 => s[0].setLoop;
+0 => s[0].setLoop;
 1 => s[1].setLoop;
-s[0].setPositionToStart();
-s[1].setPositionToStart();
+//s[0].setPositionToStart();
+//s[1].setPositionToStart();
 bar => s[0].setPlayRate;
 bar => s[1].setPlayRate;
 
@@ -131,9 +131,40 @@ bar => s[1].setPlayRate;
 (0.6, 0.2) => s[0].setFeedbackGain;
 
 // put drums through filter
-(150.0, 1.0) => s[1].setFilter;
+(500.0, 1.0) => s[1].setFilter;
 
+// OSC stuff
+OscRecv recv;
+8001 => recv.port;
+recv.listen();
+recv.event("/chooper/touchloop/0, f") @=> OscEvent @ oe_touch;
+recv.event("/chooper/volume/0, f") @=> OscEvent @ oe_volume;
 
-while (true) {
-    bar => now;
+while (true) 
+{
+    oe_touch => now;
+    //oe_volume => now;
+    
+    while (oe_touch.nextMsg())
+    {
+        
+        oe_touch.getFloat() => float f;
+	
+	<<< "touch: ", f >>>;
+        
+        if (f > 0) {
+            s[0].setPositionToStart();
+        } else {
+            s[0].setPositionToEnd();
+        }
+	
+    }
+
+    while (oe_volume.nextMsg())
+    {
+	oe_volume.getFloat() => float volume;
+	<<< "volume: ", volume >>>;
+
+	volume => s[0].setGain;
+    }
 }
