@@ -11,8 +11,13 @@ public class Sampleholder
     dryGain => Gain wetGain => Delay delay => filter;
     delay => Gain feedbackGain => delay;
     
-    // initialise the filter
+    // initialise the filter, reverb mix, dry and wet gain
     (20000.0, 1.0) => this.setFilter;
+    0.0 => this.setReverbMix;
+    0.0 => this.setWetGain;
+    0.0 => this.setFeedbackGain;
+    0.16 => this.setGain;
+    
     
     fun void setSamplePath(string givenPath)
     {
@@ -77,9 +82,13 @@ public class Sampleholder
         0.5::delayTime => delay.delay;
     }
     
-    fun void setFeedbackGain(float wGain, float fGain)
+    fun void setWetGain(float wGain)
     {
         wGain => wetGain.gain;
+    }
+    
+    fun void setFeedbackGain(float fGain)
+    {
         fGain => feedbackGain.gain;
     }
     
@@ -107,8 +116,8 @@ fun void touchSampleShred(int sampleIndex, Sampleholder sample)
     
     while (true)
     {
-        touchEvent => now;
-        0.25::bar - (now % 0.25::bar) => now;
+        //touchEvent => now;
+        0.5::bar - (now % 0.5::bar) => now;
         
         while (touchEvent.nextMsg()) {
             touchEvent.getFloat() => float f;
@@ -117,6 +126,28 @@ fun void touchSampleShred(int sampleIndex, Sampleholder sample)
                 sample.setPositionToStart();
             } else {
                 sample.setPositionToEnd();
+            }
+        }
+    }
+}
+
+fun void loopSampleShred(int sampleIndex, Sampleholder sample)
+{
+    recv.event("/chooper/looploop/" + sampleIndex + ", f") @=> OscEvent loopEvent;
+    
+    while (true)
+    {
+        0.5::bar - (now % 0.5::bar) => now;
+        
+        while (loopEvent.nextMsg()) {
+            loopEvent.getFloat() => float f;
+            
+            if (f > 0) {
+                1 => sample.setLoop;
+                sample.setPositionToStart();
+            } else {
+                0 => sample.setLoop;
+                sample.setPositionToEnd;
             }
         }
     }
@@ -154,6 +185,34 @@ fun void reverbShred(int sampleIndex, Sampleholder sample)
     }
 }
 
+fun void delayWetMixShred(int sampleIndex, Sampleholder sample)
+{
+    recv.event("/chooper/delayvolume/" + sampleIndex + ", f") @=> OscEvent wetEvent;
+    
+    while (true) {
+        wetEvent => now;
+        
+        while (wetEvent.nextMsg()) {
+            wetEvent.getFloat() => float f;
+            f => sample.setWetGain;
+        }
+    }
+}
+
+fun void delayFeedbackShred(int sampleIndex, Sampleholder sample)
+{
+    recv.event("/chooper/feedbackvolume/" + sampleIndex + ", f") @=> OscEvent feedbackEvent;
+    
+    while (true) {
+        feedbackEvent => now;
+        
+        while (feedbackEvent.nextMsg()) {
+            feedbackEvent.getFloat() => float f;
+            f => sample.setFeedbackGain;
+        }
+    }
+}
+
 // array of files to load
 [
 [me.dir(-5) + "/Samples/DISCRETEENERGYII[SAMPLE PACK]/SYNTHS", "152bpm_UO_BELLS_C.wav"],
@@ -169,32 +228,22 @@ for (0 => int i; i < files.cap(); i++) {
     files[i][1] => s[i].setSample;
 }
 
-// initialize delay
+// initialize delay and set play rates
 for (0 => int i; i < files.cap(); i++) {
     bar => s[i].setDelayMax;
     cr => s[i].setDelayTime;
-    (0, 0) => s[i].setFeedbackGain;
+    bar => s[i].setPlayRate;
 }
 
-0 => s[0].setLoop;
-1 => s[1].setLoop;
-//s[0].setPositionToStart();
-//s[1].setPositionToStart();
-bar => s[0].setPlayRate;
-bar => s[1].setPlayRate;
-
-0.3 => s[0].setGain;
-0.6 => s[1].setGain;
-0.02 => s[1].setReverbMix;
-
-(0.6, 0.2) => s[0].setFeedbackGain;
-
-// put drums through filter
-(1500.0, 1.0) => s[1].setFilter;
-
-spork ~ touchSampleShred(0, s[0]);
-spork ~ volumeShred(0, s[0]);
-spork ~ reverbShred(0, s[0]);
+// spork 'em all
+for (0 => int i; i < files.cap(); i++) {
+    spork ~ touchSampleShred(i, s[i]);
+    spork ~ loopSampleShred(i, s[i]);
+    spork ~ volumeShred(i, s[i]);
+    spork ~ reverbShred(i, s[i]);
+    spork ~ delayWetMixShred(i, s[i]);
+    spork ~ delayFeedbackShred(i, s[i]);
+}
 
 while (true) 
 {
