@@ -89,11 +89,70 @@ public class Sampleholder
     }
 }
 
+// OSC stuff
+OscRecv recv;
+8001 => recv.port;
+recv.listen();
+
+// define BPM
 120.0 => float BPM;
 4 => int signature;
 60.0 / BPM => float crotchet; //float representing the number of seconds that a crotched lasts
 crotchet::second => dur cr;
 signature::cr => dur bar;
+
+fun void touchSampleShred(int sampleIndex, Sampleholder sample)
+{
+    recv.event("/chooper/touchloop/" + sampleIndex + ", f") @=> OscEvent touchEvent;
+    
+    while (true)
+    {
+        touchEvent => now;
+        0.25::bar - (now % 0.25::bar) => now;
+        
+        while (touchEvent.nextMsg()) {
+            touchEvent.getFloat() => float f;
+            
+            if (f > 0) {
+                sample.setPositionToStart();
+            } else {
+                sample.setPositionToEnd();
+            }
+        }
+    }
+}
+
+fun void volumeShred(int sampleIndex, Sampleholder sample)
+{
+    recv.event("/chooper/volume/" + sampleIndex + ", f") @=> OscEvent volumeEvent;
+    
+    while (true)
+    {
+        volumeEvent => now;
+        
+        while (volumeEvent.nextMsg()) {
+            volumeEvent.getFloat() => float f;
+            
+            f => sample.setGain;
+        }
+    }
+}
+
+fun void reverbShred(int sampleIndex, Sampleholder sample)
+{
+    recv.event("/chooper/reverbmix/" + sampleIndex + ", f") @=> OscEvent reverbEvent;
+    
+    while (true)
+    {
+        reverbEvent => now;
+        
+        while (reverbEvent.nextMsg()) {
+            reverbEvent.getFloat() => float f;
+            
+            f => sample.setReverbMix;
+        }
+    }
+}
 
 // array of files to load
 [
@@ -131,40 +190,13 @@ bar => s[1].setPlayRate;
 (0.6, 0.2) => s[0].setFeedbackGain;
 
 // put drums through filter
-(500.0, 1.0) => s[1].setFilter;
+(1500.0, 1.0) => s[1].setFilter;
 
-// OSC stuff
-OscRecv recv;
-8001 => recv.port;
-recv.listen();
-recv.event("/chooper/touchloop/0, f") @=> OscEvent @ oe_touch;
-recv.event("/chooper/volume/0, f") @=> OscEvent @ oe_volume;
+spork ~ touchSampleShred(0, s[0]);
+spork ~ volumeShred(0, s[0]);
+spork ~ reverbShred(0, s[0]);
 
 while (true) 
 {
-    oe_touch => now;
-    //oe_volume => now;
-    
-    while (oe_touch.nextMsg())
-    {
-        
-        oe_touch.getFloat() => float f;
-	
-	<<< "touch: ", f >>>;
-        
-        if (f > 0) {
-            s[0].setPositionToStart();
-        } else {
-            s[0].setPositionToEnd();
-        }
-	
-    }
-
-    while (oe_volume.nextMsg())
-    {
-	oe_volume.getFloat() => float volume;
-	<<< "volume: ", volume >>>;
-
-	volume => s[0].setGain;
-    }
+    bar => now;
 }
