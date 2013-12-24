@@ -1,4 +1,4 @@
-public class Sampleholder
+public class Sampleholder extends Chubgraph
 {
     SndBuf buffy;
     string path;
@@ -7,7 +7,7 @@ public class Sampleholder
     
     
     // initialise sound chain
-    buffy => Gain dryGain => LPF filter => JCRev reverb => dac;
+    buffy => Gain dryGain => LPF filter => JCRev reverb => outlet;
     dryGain => Gain wetGain => Delay delay => filter;
     delay => Gain feedbackGain => delay;
     
@@ -98,6 +98,10 @@ public class Sampleholder
     }
 }
 
+/**************************************************************************************/
+/* GLOBAL VARIABLES                                                                   */
+/**************************************************************************************/
+
 // OSC stuff
 OscRecv recv;
 8001 => recv.port;
@@ -110,13 +114,21 @@ recv.listen();
 crotchet::second => dur cr;
 signature::cr => dur bar;
 
+// array of files to load
+[
+[me.dir(-5) + "/Samples/DISCRETEENERGYII[SAMPLE PACK]/SYNTHS", "152bpm_UO_BELLS_C.wav"],
+[me.dir(-5) + "/Samples/DISCRETE ENERGY [SAMPLE PACK]/DRUM LOOPS", "76_IN_DRUMLOOP.wav"]
+] @=> string files[][];
+
+/**************************************************************************************/
+/* SHREDS                                                                             */
+/**************************************************************************************/
 fun void touchSampleShred(int sampleIndex, Sampleholder sample)
 {
     recv.event("/chooper/touchloop/" + sampleIndex + ", f") @=> OscEvent touchEvent;
     
     while (true)
     {
-        //touchEvent => now;
         0.5::bar - (now % 0.5::bar) => now;
         
         while (touchEvent.nextMsg()) {
@@ -213,23 +225,22 @@ fun void delayFeedbackShred(int sampleIndex, Sampleholder sample)
     }
 }
 
-// array of files to load
-[
-[me.dir(-5) + "/Samples/DISCRETEENERGYII[SAMPLE PACK]/SYNTHS", "152bpm_UO_BELLS_C.wav"],
-[me.dir(-5) + "/Samples/DISCRETE ENERGY [SAMPLE PACK]/DRUM LOOPS", "76_IN_DRUMLOOP.wav"]
-] @=> string files[][];
+/**************************************************************************************/
+/* MAIN PROGRAM                                                                       */
+/**************************************************************************************/
 
 // create instances of Sampleholder
 Sampleholder s[files.cap()];
 
-// load the files
+// connect the instances to dac and initialize them
 for (0 => int i; i < files.cap(); i++) {
+    s[i] => Gain masterGain => dac;
+    
+    // load the files
     files[i][0] => s[i].setSamplePath;
     files[i][1] => s[i].setSample;
-}
-
-// initialize delay and set play rates
-for (0 => int i; i < files.cap(); i++) {
+    
+    // initialize delay and set play rates
     bar => s[i].setDelayMax;
     cr => s[i].setDelayTime;
     bar => s[i].setPlayRate;
