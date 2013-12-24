@@ -98,6 +98,7 @@ public class Sampleholder extends Chubgraph
     }
 }
 
+
 /**************************************************************************************/
 /* GLOBAL VARIABLES                                                                   */
 /**************************************************************************************/
@@ -113,6 +114,7 @@ recv.listen();
 60.0 / BPM => float crotchet; //float representing the number of seconds that a crotched lasts
 crotchet::second => dur cr;
 signature::cr => dur bar;
+0 => int counter; // this is used to figure out the start of a bar
 
 // array of files to load
 [
@@ -123,18 +125,21 @@ signature::cr => dur bar;
 /**************************************************************************************/
 /* SHREDS                                                                             */
 /**************************************************************************************/
+
 fun void touchSampleShred(int sampleIndex, Sampleholder sample)
 {
     recv.event("/chooper/touchloop/" + sampleIndex + ", f") @=> OscEvent touchEvent;
     
     while (true)
     {
-        0.5::bar - (now % 0.5::bar) => now;
+        //0.5::bar - (now % 0.5::bar) => now;
+        touchEvent => now;
         
         while (touchEvent.nextMsg()) {
             touchEvent.getFloat() => float f;
+            <<< "touchEvent: ",f, "sample: ", sampleIndex >>>;
             
-            if (f > 0) {
+            if (f > 0 && (counter % signature) == 0) {
                 sample.setPositionToStart();
             } else {
                 sample.setPositionToEnd();
@@ -149,12 +154,14 @@ fun void loopSampleShred(int sampleIndex, Sampleholder sample)
     
     while (true)
     {
-        0.5::bar - (now % 0.5::bar) => now;
+        //0.5::bar - (now % 0.5::bar) => now;
+        loopEvent => now;
         
         while (loopEvent.nextMsg()) {
             loopEvent.getFloat() => float f;
+            <<< "loopEvent: ",f, "sample: ", sampleIndex >>>;
             
-            if (f > 0) {
+            if (f > 0 && (counter % signature) == 0) {
                 1 => sample.setLoop;
                 sample.setPositionToStart();
             } else {
@@ -175,6 +182,7 @@ fun void volumeShred(int sampleIndex, Sampleholder sample)
         
         while (volumeEvent.nextMsg()) {
             volumeEvent.getFloat() => float f;
+            <<< "volumeEvent: ",f, "sample: ", sampleIndex >>>;
             
             f => sample.setGain;
         }
@@ -191,6 +199,7 @@ fun void reverbShred(int sampleIndex, Sampleholder sample)
         
         while (reverbEvent.nextMsg()) {
             reverbEvent.getFloat() => float f;
+            <<< "reverbEvent: ",f, "sample: ", sampleIndex >>>;
             
             f => sample.setReverbMix;
         }
@@ -206,6 +215,8 @@ fun void delayWetMixShred(int sampleIndex, Sampleholder sample)
         
         while (wetEvent.nextMsg()) {
             wetEvent.getFloat() => float f;
+            <<< "wetEvent: ",f, "sample: ", sampleIndex >>>;
+            
             f => sample.setWetGain;
         }
     }
@@ -220,10 +231,13 @@ fun void delayFeedbackShred(int sampleIndex, Sampleholder sample)
         
         while (feedbackEvent.nextMsg()) {
             feedbackEvent.getFloat() => float f;
+            <<< "feedbackEvent: ",f, "sample: ", sampleIndex >>>;
+            
             f => sample.setFeedbackGain;
         }
     }
 }
+
 
 /**************************************************************************************/
 /* MAIN PROGRAM                                                                       */
@@ -246,6 +260,8 @@ for (0 => int i; i < files.cap(); i++) {
     bar => s[i].setPlayRate;
 }
 
+
+
 // spork 'em all
 for (0 => int i; i < files.cap(); i++) {
     spork ~ touchSampleShred(i, s[i]);
@@ -259,4 +275,5 @@ for (0 => int i; i < files.cap(); i++) {
 while (true) 
 {
     bar => now;
+    counter++;
 }

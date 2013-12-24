@@ -2,7 +2,7 @@ OscRecv recv;
 8001 => recv.port;
 recv.listen();
 
-recv.event("/chooper/touchloop/0, f") @=> OscEvent @ oe;
+recv.event("/chooper/touchloop/0, f") @=> OscEvent oe;
 
 
 while (true)
