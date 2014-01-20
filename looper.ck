@@ -116,6 +116,9 @@ crotchet::second => dur cr;
 signature::cr => dur bar;
 0 => int counter; // this is used to figure out the start of a bar
 
+// master gain
+Gain masterGain => dac;
+
 // array of files to load
 [
 [me.dir(-5) + "/Samples/DISCRETEENERGYII[SAMPLE PACK]/SYNTHS", "152bpm_UO_BELLS_C.wav"],
@@ -137,9 +140,8 @@ fun void touchSampleShred(int sampleIndex, Sampleholder sample)
         
         while (touchEvent.nextMsg()) {
             touchEvent.getFloat() => float f;
-            <<< "touchEvent: ",f, "sample: ", sampleIndex >>>;
             
-            if (f > 0 && (counter % signature) == 0) {
+            if (f > 0) {
                 sample.setPositionToStart();
             } else {
                 sample.setPositionToEnd();
@@ -150,18 +152,17 @@ fun void touchSampleShred(int sampleIndex, Sampleholder sample)
 
 fun void loopSampleShred(int sampleIndex, Sampleholder sample)
 {
+    // figure out how to sync better with counter % bar
     recv.event("/chooper/looploop/" + sampleIndex + ", f") @=> OscEvent loopEvent;
     
     while (true)
     {
-        //0.5::bar - (now % 0.5::bar) => now;
-        loopEvent => now;
+        0.5::bar - (now % 0.5::bar) => now;
         
         while (loopEvent.nextMsg()) {
             loopEvent.getFloat() => float f;
-            <<< "loopEvent: ",f, "sample: ", sampleIndex >>>;
             
-            if (f > 0 && (counter % signature) == 0) {
+            if (f > 0) {
                 1 => sample.setLoop;
                 sample.setPositionToStart();
             } else {
@@ -182,9 +183,8 @@ fun void volumeShred(int sampleIndex, Sampleholder sample)
         
         while (volumeEvent.nextMsg()) {
             volumeEvent.getFloat() => float f;
-            <<< "volumeEvent: ",f, "sample: ", sampleIndex >>>;
             
-            f => sample.setGain;
+            smoothInput(f) => sample.setGain;
         }
     }
 }
@@ -199,9 +199,8 @@ fun void reverbShred(int sampleIndex, Sampleholder sample)
         
         while (reverbEvent.nextMsg()) {
             reverbEvent.getFloat() => float f;
-            <<< "reverbEvent: ",f, "sample: ", sampleIndex >>>;
             
-            f => sample.setReverbMix;
+            smoothInput(f) => sample.setReverbMix;
         }
     }
 }
@@ -215,9 +214,8 @@ fun void delayWetMixShred(int sampleIndex, Sampleholder sample)
         
         while (wetEvent.nextMsg()) {
             wetEvent.getFloat() => float f;
-            <<< "wetEvent: ",f, "sample: ", sampleIndex >>>;
             
-            f => sample.setWetGain;
+            smoothInput(f) => sample.setWetGain;
         }
     }
 }
@@ -231,11 +229,25 @@ fun void delayFeedbackShred(int sampleIndex, Sampleholder sample)
         
         while (feedbackEvent.nextMsg()) {
             feedbackEvent.getFloat() => float f;
-            <<< "feedbackEvent: ",f, "sample: ", sampleIndex >>>;
             
-            f => sample.setFeedbackGain;
+            smoothInput(f) => sample.setFeedbackGain;
         }
     }
+}
+
+/**************************************************************************************/
+/* HELPER FUNCTIONS                                                                   */
+/**************************************************************************************/
+
+fun float smoothInput(float f)
+{
+    if (f == 0.0) 0.001 => f; // make sure that we don't pass zero to log()
+    
+    Math.log(f) + 1 => float smooth;
+    
+    if (smooth < 0.0) 0.0 => smooth;
+    
+    return smooth;
 }
 
 
@@ -248,7 +260,7 @@ Sampleholder s[files.cap()];
 
 // connect the instances to dac and initialize them
 for (0 => int i; i < files.cap(); i++) {
-    s[i] => Gain masterGain => dac;
+    s[i] => masterGain;
     
     // load the files
     files[i][0] => s[i].setSamplePath;
@@ -260,7 +272,7 @@ for (0 => int i; i < files.cap(); i++) {
     bar => s[i].setPlayRate;
 }
 
-
+0.6 => masterGain.gain;
 
 // spork 'em all
 for (0 => int i; i < files.cap(); i++) {
