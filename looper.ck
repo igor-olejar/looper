@@ -92,9 +92,14 @@ public class Sampleholder extends Chubgraph
         fGain => feedbackGain.gain;
     }
     
-    fun void setFilter(float frequency, float qvalue)
+    fun void setFilterFrequency(float frequency)
     {
-        (frequency, qvalue) => filter.set;
+        frequency => filter.freq;
+    }
+    
+    fun void setFilterQ(float qvalue)
+    {
+        qvalue => filter.Q;
     }
 }
 
@@ -122,7 +127,11 @@ Gain masterGain => dac;
 // array of files to load
 [
 [me.dir(-5) + "/Samples/DISCRETEENERGYII[SAMPLE PACK]/SYNTHS", "152bpm_UO_BELLS_C.wav"],
-[me.dir(-5) + "/Samples/DISCRETE ENERGY [SAMPLE PACK]/DRUM LOOPS", "76_IN_DRUMLOOP.wav"]
+[me.dir(-5) + "/Samples/DISCRETE ENERGY [SAMPLE PACK]/DRUM LOOPS", "76_IN_DRUMLOOP.wav"],
+[me.dir(-5) + "/Samples/DISCRETEENERGYII[SAMPLE PACK]/PERC", "120bpm_UN_GLITCHPERC.wav"],
+[me.dir(-5) + "/Samples/DISCRETEENERGYII[SAMPLE PACK]/DRUMS", "120bpm_DRUMLOOP.wav"],
+[me.dir(-5) + "/Samples/DISCRETEENERGYII[SAMPLE PACK]/VOX", "100bpm_VOXCUTS_E_WET.wav"],
+[me.dir(-5) + "/Samples/DISCRETEENERGYII[SAMPLE PACK]/DRUMS", "74bpm_OX_DRUMLOOP.wav"]
 ] @=> string files[][];
 
 /**************************************************************************************/
@@ -135,7 +144,6 @@ fun void touchSampleShred(int sampleIndex, Sampleholder sample)
     
     while (true)
     {
-        //0.5::bar - (now % 0.5::bar) => now;
         touchEvent => now;
         
         while (touchEvent.nextMsg()) {
@@ -152,13 +160,13 @@ fun void touchSampleShred(int sampleIndex, Sampleholder sample)
 
 fun void loopSampleShred(int sampleIndex, Sampleholder sample)
 {
-    // figure out how to sync better with counter % bar
     recv.event("/chooper/looploop/" + sampleIndex + ", f") @=> OscEvent loopEvent;
+    
+    1::bar - (now % 1::bar) => now;
     
     while (true)
     {
-        0.5::bar - (now % 0.5::bar) => now;
-        
+        1::samp => now;
         while (loopEvent.nextMsg()) {
             loopEvent.getFloat() => float f;
             
@@ -235,6 +243,36 @@ fun void delayFeedbackShred(int sampleIndex, Sampleholder sample)
     }
 }
 
+fun void filterFrequencyShred(int sampleIndex, Sampleholder sample)
+{
+    recv.event("/chooper/filterfreq/" + sampleIndex + ", f") @=> OscEvent filterFreqEvent;
+    
+    while (true) {
+        filterFreqEvent => now;
+        
+        while (filterFreqEvent.nextMsg()) {
+            filterFreqEvent.getFloat() => float f;
+            
+            smoothInput(f) => sample.setFilterFrequency;
+        }
+    }
+}
+
+fun void filterQShred(int sampleIndex, Sampleholder sample)
+{
+    recv.event("/chooper/filterq/" + sampleIndex + ", f") @=> OscEvent filterQEvent;
+    
+    while (true) {
+        filterQEvent => now;
+        
+        while (filterQEvent.nextMsg()) {
+            filterQEvent.getFloat() => float f;
+            
+            smoothInput(f) => sample.setFilterQ;
+        }
+    }
+}
+
 /**************************************************************************************/
 /* HELPER FUNCTIONS                                                                   */
 /**************************************************************************************/
@@ -282,10 +320,22 @@ for (0 => int i; i < files.cap(); i++) {
     spork ~ reverbShred(i, s[i]);
     spork ~ delayWetMixShred(i, s[i]);
     spork ~ delayFeedbackShred(i, s[i]);
+    spork ~ filterFrequencyShred(i, s[i]);
+    spork ~ filterQShred(i, s[i]);
 }
+
+recv.event("/chooper/mastervolume, f") @=> OscEvent masterVolumeEvent;
 
 while (true) 
 {
-    bar => now;
-    counter++;
+    masterVolumeEvent => now;
+    
+    while (masterVolumeEvent.nextMsg()) {
+        masterVolumeEvent.getFloat() => float masterVolume;
+        
+        masterVolume => masterGain.gain;
+    }
+    
+    //bar => now;
+    //counter++;
 }
